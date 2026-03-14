@@ -50,7 +50,8 @@ export async function bundleClientJS(
   pages: ResolvedRoute[],
   specialFiles: { app?: string },
   projectRoot: string,
-  outDir: string
+  outDir: string,
+  envDefines: Record<string, string> = {}
 ): Promise<Map<string, string>> {
   const chunksDir = path.join(outDir, "_suivant", "chunks");
   fs.mkdirSync(chunksDir, { recursive: true });
@@ -104,6 +105,7 @@ if (!window.__suivant_hydrated) {
     external: [],
     define: {
       "process.env.NODE_ENV": '"production"',
+      ...envDefines,
     },
     logLevel: "warning",
   });

@@ -6,6 +6,7 @@ import fs from "node:fs";
 import pc from "picocolors";
 import { findPagesDir, discoverPages, resolveSpecialFile } from "../build/discover.js";
 import { matchRoute, bracketToColonPattern } from "../build/routes.js";
+import { loadEnvFiles, getPublicEnvDefines } from "../build/env.js";
 import type { ResolvedRoute, RouteManifest } from "../types.js";
 
 const MANIFEST_VIRTUAL_ID = "virtual:suivant/manifest";
@@ -207,11 +208,17 @@ function generateDevHtml(
 export async function startDevServer(options: { port: number }) {
   const projectRoot = process.cwd();
 
+  // Load environment files (makes all vars available in process.env for SSR/getStaticProps)
+  const envVars = loadEnvFiles(projectRoot, "development");
+  const publicEnvDefines = getPublicEnvDefines(envVars);
+
   const server = await createServer({
     root: projectRoot,
     server: {
       port: options.port,
     },
+    envPrefix: "SUIVANT_PUBLIC_",
+    define: publicEnvDefines,
     plugins: [suivantPlugin(projectRoot), react(), tailwindcss()],
     resolve: {
       alias: {
