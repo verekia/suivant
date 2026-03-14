@@ -1,4 +1,4 @@
-import Link from 'suivant/link'
+import { Link } from 'suivant'
 import './styles.css'
 
 export default function App({

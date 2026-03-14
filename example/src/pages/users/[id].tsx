@@ -1,6 +1,4 @@
-import Head from 'suivant/head'
-import Link from 'suivant/link'
-import { useRouter } from 'suivant/router'
+import { Head, Link, useRouter } from 'suivant'
 
 const users: Record<string, { name: string; role: string }> = {
   '1': { name: 'Alice', role: 'Engineer' },
