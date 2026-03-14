@@ -1,0 +1,53 @@
+{
+  "name": "suivant",
+  "version": "0.1.0",
+  "description": "A minimal SSG-only React framework",
+  "type": "module",
+  "bin": {
+    "suivant": "./bin/suivant.js"
+  },
+  "exports": {
+    "./link": {
+      "types": "./dist/runtime/link.d.ts",
+      "import": "./dist/runtime/link.js"
+    },
+    "./router": {
+      "types": "./dist/runtime/router.d.ts",
+      "import": "./dist/runtime/router.js"
+    },
+    "./head": {
+      "types": "./dist/runtime/head.d.ts",
+      "import": "./dist/runtime/head.js"
+    }
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "esbuild": "^0.24.0",
+    "vite": "^6.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "tailwindcss": "^4.0.0",
+    "glob": "^11.0.0",
+    "cac": "^6.7.14",
+    "picocolors": "^1.1.0"
+  },
+  "peerDependencies": {
+    "react": "^18.3.0 || ^19.0.0",
+    "react-dom": "^18.3.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "vitest": "^2.1.0"
+  }
+}
