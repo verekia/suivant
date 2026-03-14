@@ -21,6 +21,7 @@ interface RouterState {
 interface RouterContextValue extends SuivantRouter {
   Component: ComponentType<any>;
   pageProps: Record<string, any>;
+  manifest: RouteManifest;
 }
 
 const RouterContext = createContext<RouterContextValue | null>(null);
@@ -50,8 +51,25 @@ export function useRouter(): SuivantRouter {
   };
 }
 
+// Cache for prefetched/loaded pages
+const pageCache = new Map<
+  string,
+  Promise<{ Component: ComponentType<any>; pageProps: Record<string, any>; pathname: string; query: Record<string, string> } | null>
+>();
 
 async function loadPage(
+  url: string,
+  manifest: RouteManifest
+): Promise<{ Component: ComponentType<any>; pageProps: Record<string, any>; pathname: string; query: Record<string, string> } | null> {
+  const cached = pageCache.get(url);
+  if (cached) return cached;
+
+  const promise = loadPageUncached(url, manifest);
+  pageCache.set(url, promise);
+  return promise;
+}
+
+async function loadPageUncached(
   url: string,
   manifest: RouteManifest
 ): Promise<{ Component: ComponentType<any>; pageProps: Record<string, any>; pathname: string; query: Record<string, string> } | null> {
@@ -76,6 +94,24 @@ async function loadPage(
     pathname: match.pattern,
     query: match.params,
   };
+}
+
+/**
+ * Prefetch a page's JS chunk and data so navigation is instant.
+ * Safe to call multiple times — subsequent calls are no-ops.
+ */
+export function prefetchPage(url: string, manifest: RouteManifest): void {
+  if (pageCache.has(url)) return;
+  const promise = loadPageUncached(url, manifest);
+  pageCache.set(url, promise);
+  // Swallow errors — prefetch failures are non-critical
+  promise.catch(() => {});
+}
+
+/** Access the route manifest from context (used by Link for prefetching) */
+export function useManifest(): RouteManifest | null {
+  const ctx = useContext(RouterContext);
+  return ctx?.manifest ?? null;
 }
 
 interface RouterProviderProps {
@@ -162,6 +198,7 @@ export function RouterProvider({
     back,
     Component: state.Component,
     pageProps: state.pageProps,
+    manifest,
   };
 
   return (

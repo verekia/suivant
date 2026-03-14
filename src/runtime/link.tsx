@@ -1,10 +1,12 @@
-import { type MouseEvent, type AnchorHTMLAttributes, useCallback } from "react";
-import { useRouter } from "./router.js";
+import { type MouseEvent, type PointerEvent, type AnchorHTMLAttributes, useCallback } from "react";
+import { useRouter, useManifest, prefetchPage } from "./router.js";
 
 export interface LinkProps
   extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> {
   href: string;
   replace?: boolean;
+  /** Prefetch the page on hover. Defaults to true. */
+  prefetch?: boolean;
 }
 
 function isModifiedEvent(event: MouseEvent): boolean {
@@ -18,12 +20,15 @@ function isExternalUrl(href: string): boolean {
 export default function Link({
   href,
   replace: shouldReplace = false,
+  prefetch = true,
   children,
   onClick,
+  onPointerEnter,
   target,
   ...rest
 }: LinkProps) {
   const router = useRouter();
+  const manifest = useManifest();
 
   const handleClick = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
@@ -47,8 +52,27 @@ export default function Link({
     [href, shouldReplace, onClick, target, router]
   );
 
+  const handlePointerEnter = useCallback(
+    (e: PointerEvent<HTMLAnchorElement>) => {
+      onPointerEnter?.(e);
+
+      if (!prefetch || !manifest) return;
+      if (isExternalUrl(href)) return;
+      if (target && target !== "_self") return;
+
+      prefetchPage(href, manifest);
+    },
+    [href, prefetch, manifest, onPointerEnter, target]
+  );
+
   return (
-    <a href={href} onClick={handleClick} target={target} {...rest}>
+    <a
+      href={href}
+      onClick={handleClick}
+      onPointerEnter={handlePointerEnter}
+      target={target}
+      {...rest}
+    >
       {children}
     </a>
   );
