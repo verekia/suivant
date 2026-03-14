@@ -16,6 +16,7 @@ import {
   writeDataFiles,
 } from "../build/manifest.js";
 import { fillParams, routeToDataPath, routeToChunkName } from "../build/routes.js";
+import { loadEnvFiles, getPublicEnvDefines } from "../build/env.js";
 import type { ResolvedRoute, DocumentParams, AppProps } from "../types.js";
 import type { ComponentType } from "react";
 
@@ -44,6 +45,11 @@ export function defaultApp({ Component, pageProps }) {
 export async function build() {
   const projectRoot = process.cwd();
   const outDir = path.join(projectRoot, "out");
+
+  // Load environment files
+  console.log(pc.gray("  Loading environment variables..."));
+  const envVars = loadEnvFiles(projectRoot, "production");
+  const publicEnvDefines = getPublicEnvDefines(envVars);
 
   // Clean output dir
   if (fs.existsSync(outDir)) {
@@ -170,7 +176,8 @@ export async function build() {
     routes,
     { app: appFile ?? undefined },
     projectRoot,
-    outDir
+    outDir,
+    publicEnvDefines
   );
 
   // 7. Generate manifest
