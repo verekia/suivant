@@ -1,4 +1,5 @@
 import * as esbuild from "esbuild";
+import { execSync } from "node:child_process";
 import { glob } from "glob";
 
 const entryPoints = await glob("src/**/*.{ts,tsx}", {
@@ -17,5 +18,8 @@ await esbuild.build({
   jsx: "automatic",
   outExtension: { ".js": ".js" },
 });
+
+// Emit TypeScript declaration files
+execSync("tsc --emitDeclarationOnly", { stdio: "inherit" });
 
 console.log("Build complete.");

@@ -25,10 +25,20 @@ interface RouterContextValue extends SuivantRouter {
 
 const RouterContext = createContext<RouterContextValue | null>(null);
 
+const noop = async () => {};
+
 export function useRouter(): SuivantRouter {
   const ctx = useContext(RouterContext);
   if (!ctx) {
-    throw new Error("useRouter must be used within a RouterProvider");
+    // During SSR, return a stub since there's no RouterProvider
+    return {
+      pathname: "",
+      query: {},
+      asPath: typeof window !== "undefined" ? window.location.pathname : "",
+      push: noop,
+      replace: noop,
+      back: () => {},
+    };
   }
   return {
     pathname: ctx.pathname,
@@ -39,6 +49,7 @@ export function useRouter(): SuivantRouter {
     back: ctx.back,
   };
 }
+
 
 async function loadPage(
   url: string,

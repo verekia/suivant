@@ -3,29 +3,11 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "suivant",
+      "name": "suivant-example",
       "dependencies": {
-        "@tailwindcss/vite": "^4.0.0",
-        "@vitejs/plugin-react": "^4.3.0",
-        "cac": "^6.7.14",
-        "esbuild": "^0.24.0",
-        "glob": "^11.0.0",
-        "picocolors": "^1.1.0",
-        "tailwindcss": "^4.0.0",
-        "vite": "^6.0.0",
-      },
-      "devDependencies": {
-        "@types/node": "^25.5.0",
-        "@types/react": "^19.0.0",
-        "@types/react-dom": "^19.0.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-        "typescript": "^5.7.0",
-        "vitest": "^2.1.0",
-      },
-      "peerDependencies": {
-        "react": "^18.3.0 || ^19.0.0",
-        "react-dom": "^18.3.0 || ^19.0.0",
+        "suivant": "file:..",
       },
     },
   },
@@ -395,6 +377,8 @@
     "stackback": ["stackback@0.0.2", "", {}, "sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw=="],
 
     "std-env": ["std-env@3.10.0", "", {}, "sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg=="],
+
+    "suivant": ["suivant@file:..", { "dependencies": { "@tailwindcss/vite": "^4.0.0", "@vitejs/plugin-react": "^4.3.0", "cac": "^6.7.14", "esbuild": "^0.24.0", "glob": "^11.0.0", "picocolors": "^1.1.0", "tailwindcss": "^4.0.0", "vite": "^6.0.0" }, "devDependencies": { "@types/node": "^25.5.0", "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0", "react": "^19.0.0", "react-dom": "^19.0.0", "typescript": "^5.7.0", "vitest": "^2.1.0" }, "peerDependencies": { "react": "^18.3.0 || ^19.0.0", "react-dom": "^18.3.0 || ^19.0.0" }, "bin": { "suivant": "./bin/suivant.js" } }],
 
     "tailwindcss": ["tailwindcss@4.2.1", "", {}, "sha512-/tBrSQ36vCleJkAOsy9kbNTgaxvGbyOamC30PRePTQe/o1MFwEKHQk4Cn7BNGaPtjp+PuUrByJehM1hgxfq4sw=="],
 

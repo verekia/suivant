@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import pc from "picocolors";
 import {
   findPagesDir,
@@ -7,7 +8,7 @@ import {
   resolveSpecialFile,
 } from "../build/discover.js";
 import { compilePagesForSSR, bundleClientJS } from "../build/bundle.js";
-import { renderPage, DefaultApp, defaultDocument } from "../build/render.js";
+import { renderPage, defaultDocument } from "../build/render.js";
 import { detectCssFile, buildCss } from "../build/css.js";
 import {
   generateManifest,
@@ -17,6 +18,28 @@ import {
 import { fillParams, routeToDataPath, routeToChunkName } from "../build/routes.js";
 import type { ResolvedRoute, DocumentParams, AppProps } from "../types.js";
 import type { ComponentType } from "react";
+
+/** SSR render helper source — compiled alongside pages so it shares the same externalized React */
+const SSR_RENDER_HELPER = `
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
+
+export function ssrRender(App, Page, pageProps) {
+  // Use global head tag collection so it works across separately bundled CJS modules
+  const headTags = [];
+  globalThis.__suivant_head_tags = headTags;
+
+  const appElement = createElement(App, { Component: Page, pageProps });
+  const html = renderToString(appElement);
+
+  delete globalThis.__suivant_head_tags;
+  return { html, headTags };
+}
+
+export function defaultApp({ Component, pageProps }) {
+  return createElement(Component, pageProps);
+}
+`;
 
 export async function build() {
   const projectRoot = process.cwd();
@@ -37,25 +60,37 @@ export async function build() {
   const appFile = resolveSpecialFile(pagesDir, "_app");
   const documentFile = resolveSpecialFile(pagesDir, "_document");
 
+  // Write SSR render helper
+  const ssrHelperDir = path.join(projectRoot, ".suivant", "helpers");
+  fs.mkdirSync(ssrHelperDir, { recursive: true });
+  const ssrHelperPath = path.join(ssrHelperDir, "ssr-render.tsx");
+  fs.writeFileSync(ssrHelperPath, SSR_RENDER_HELPER);
+
   // 2. Compile pages for SSR
   console.log(pc.gray("  Compiling pages for SSR..."));
   const ssrOutDir = await compilePagesForSSR(
     routes,
     { app: appFile ?? undefined, document: documentFile ?? undefined },
-    projectRoot
+    projectRoot,
+    [ssrHelperPath]
   );
 
   // Helper to load a compiled SSR module
+  // Anchor require to project root so externalized deps (react, etc.) resolve from the user's node_modules
+  const projectRequire = createRequire(path.join(projectRoot, "package.json"));
   function loadSSRModule(filePath: string): any {
     const relative = path.relative(projectRoot, filePath);
     const ssrPath = path.join(ssrOutDir, relative).replace(/\.(tsx?|jsx?)$/, ".cjs");
     // Clear require cache
-    delete require.cache[require.resolve(ssrPath)];
-    return require(ssrPath);
+    delete projectRequire.cache[projectRequire.resolve(ssrPath)];
+    return projectRequire(ssrPath);
   }
 
+  // Load SSR render helper
+  const ssrHelper = loadSSRModule(ssrHelperPath);
+
   // Load _app
-  let App: ComponentType<AppProps> = DefaultApp;
+  let App: ComponentType<AppProps> = ssrHelper.defaultApp;
   if (appFile) {
     const appMod = loadSSRModule(appFile);
     App = appMod.default || appMod;
@@ -178,6 +213,7 @@ export async function build() {
       cssPath,
       scriptTags: `${manifestScript}\n    ${scriptTag}`,
       dataJson: JSON.stringify(pageProps),
+      ssrRender: ssrHelper.ssrRender,
     });
 
     // Determine output file path

@@ -32,7 +32,7 @@ function elementToHeadTag(element: ReactElement): HeadTag {
   const { type, props, key } = element;
   return {
     type: type as string,
-    props: { ...props },
+    props: { ...(props as Record<string, any>) },
     key: key ?? undefined,
   };
 }
@@ -103,9 +103,14 @@ export default function Head({ children }: { children: ReactNode }) {
     }
   });
 
-  // SSR mode: push tags to context
+  // SSR mode: push tags to context (React context or global)
   if (ssrContext) {
     ssrContext.tags.push(...tags);
+    return null;
+  }
+  const globalTags = (globalThis as any).__suivant_head_tags as HeadTag[] | undefined;
+  if (globalTags) {
+    globalTags.push(...tags);
     return null;
   }
 

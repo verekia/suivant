@@ -11,12 +11,14 @@ import { routeToChunkName } from "./routes.js";
 export async function compilePagesForSSR(
   pages: ResolvedRoute[],
   specialFiles: { app?: string; document?: string },
-  projectRoot: string
+  projectRoot: string,
+  extraEntryPoints: string[] = []
 ): Promise<string> {
   const outdir = path.join(projectRoot, ".suivant", "ssr");
 
   const entryPoints: string[] = [
     ...pages.map((p) => p.filePath),
+    ...extraEntryPoints,
   ];
   if (specialFiles.app) entryPoints.push(specialFiles.app);
   if (specialFiles.document) entryPoints.push(specialFiles.document);
@@ -104,6 +106,7 @@ hydrate({ Page, App, manifest });
   const chunkPaths = new Map<string, string>();
   if (result.metafile) {
     for (const [outputFile] of Object.entries(result.metafile.outputs)) {
+      if (!outputFile.endsWith(".js")) continue;
       const basename = path.basename(outputFile, ".js");
       // Match chunk names from entry map
       for (const [chunkName] of entryMap) {
