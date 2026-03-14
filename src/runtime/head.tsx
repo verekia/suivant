@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   type ReactNode,
   type ReactElement,
   Children,
@@ -64,6 +65,8 @@ function applyHeadTags(tags: HeadTag[]): (() => void) {
     deduped.set(getDedupeKey(tag), tag);
   }
 
+  const fragment = document.createDocumentFragment();
+
   for (const tag of deduped.values()) {
     if (tag.type === "title") {
       document.title = tag.props.children || "";
@@ -81,9 +84,11 @@ function applyHeadTags(tags: HeadTag[]): (() => void) {
       }
     }
     el.setAttribute("data-suivant-head", "");
-    document.head.appendChild(el);
+    fragment.appendChild(el);
     elements.push(el);
   }
+
+  document.head.appendChild(fragment);
 
   return () => {
     for (const el of elements) {
@@ -114,10 +119,13 @@ export default function Head({ children }: { children: ReactNode }) {
     return null;
   }
 
+  // Stable serialization so the effect only re-runs when tags actually change
+  const tagKey = useMemo(() => JSON.stringify(tags), [tags]);
+
   // Client-side: manage head tags via effects
   useEffect(() => {
     return applyHeadTags(tags);
-  });
+  }, [tagKey]);
 
   return null;
 }
