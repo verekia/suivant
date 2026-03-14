@@ -1,5 +1,4 @@
-import Head from 'suivant/head'
-import Link from 'suivant/link'
+import { Head, Link } from 'suivant'
 
 export default function About() {
   return (

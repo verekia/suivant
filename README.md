@@ -81,7 +81,7 @@ Static routes are matched before dynamic ones. Files starting with `_` (except `
 Fetch data at build time. The returned `props` are passed to the page component.
 
 ```tsx
-import type { GetStaticProps } from 'suivant/types'
+import type { GetStaticProps } from 'suivant'
 
 export const getStaticProps: GetStaticProps<{ name: string }> = async ({ params }) => {
   const data = await fetch(`https://api.example.com/users/${params.id}`)
@@ -107,7 +107,7 @@ type GetStaticProps<P> = (context: {
 Required for dynamic routes (`[param]`). Defines which paths to pre-render.
 
 ```tsx
-import type { GetStaticPaths, GetStaticProps } from 'suivant/types'
+import type { GetStaticPaths, GetStaticProps } from 'suivant'
 
 export const getStaticPaths: GetStaticPaths = async () => {
   const res = await fetch('https://api.example.com/users')
@@ -138,14 +138,12 @@ type GetStaticPaths = () =>
 
 ## API
 
-### `suivant/router`
-
-#### `useRouter()`
+### `useRouter()`
 
 Returns the router object for the current page.
 
 ```tsx
-import { useRouter } from 'suivant/router'
+import { useRouter } from 'suivant'
 
 export default function Page() {
   const router = useRouter()
@@ -174,14 +172,12 @@ export default function Page() {
 | `replace`   | `(url: string) => Promise<void>` | Navigate without adding a history entry  |
 | `back`      | `() => void`                   | Go back in browser history               |
 
-### `suivant/link`
+### `Link`
 
-#### `Link`
-
-Client-side navigation component. Default export.
+Client-side navigation component.
 
 ```tsx
-import Link from 'suivant/link'
+import { Link } from 'suivant'
 
 <Link href="/about">About</Link>
 <Link href="/users/5" replace>User 5</Link>
@@ -197,14 +193,12 @@ import Link from 'suivant/link'
 
 All standard `<a>` attributes are also accepted. External URLs, modifier-key clicks (cmd, ctrl, alt, shift), and `target="_blank"` links fall through to normal browser navigation.
 
-### `suivant/head`
+### `Head`
 
-#### `Head`
-
-Manages `<head>` tags declaratively. Default export. Works during both SSR (build time) and client-side rendering.
+Manages `<head>` tags declaratively. Works during both SSR (build time) and client-side rendering.
 
 ```tsx
-import Head from 'suivant/head'
+import { Head } from 'suivant'
 
 export default function Page() {
   return (
@@ -240,7 +234,7 @@ Tags are automatically deduplicated. Last occurrence wins. Deduplication rules:
 Optional. Wraps every page. Use it for global layouts, providers, or CSS imports.
 
 ```tsx
-import type { AppProps } from 'suivant/types'
+import type { AppProps } from 'suivant'
 import '../styles.css'
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -260,7 +254,7 @@ export default function App({ Component, pageProps }: AppProps) {
 Optional. Controls the outer HTML shell. Exports a **function that returns an HTML string** (not a React component).
 
 ```tsx
-import type { DocumentParams } from 'suivant/types'
+import type { DocumentParams } from 'suivant'
 
 export default function Document({ html, head, styles, scripts }: DocumentParams) {
   return `<!DOCTYPE html>
@@ -291,7 +285,7 @@ export default function Document({ html, head, styles, scripts }: DocumentParams
 
 ## Types
 
-All public types are available from `suivant/types`:
+All public types are available from the main `suivant` package:
 
 ```ts
 import type {
@@ -301,7 +295,7 @@ import type {
   SuivantRouter,
   AppProps,
   DocumentParams,
-} from 'suivant/types'
+} from 'suivant'
 ```
 
 | Type             | Description                                  |
@@ -319,7 +313,7 @@ Import a CSS file in `_app.tsx`. Tailwind CSS v4 is detected and compiled automa
 
 ```tsx
 // _app.tsx
-import type { AppProps } from 'suivant/types'
+import type { AppProps } from 'suivant'
 import '../styles.css'
 
 export default function App({ Component, pageProps }: AppProps) {

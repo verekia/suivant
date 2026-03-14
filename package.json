@@ -7,6 +7,10 @@
     "suivant": "./bin/suivant.js"
   },
   "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
     "./link": {
       "types": "./dist/runtime/link.d.ts",
       "import": "./dist/runtime/link.js"
