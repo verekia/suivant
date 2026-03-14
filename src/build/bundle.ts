@@ -75,8 +75,14 @@ import { hydrate } from "${path.resolve(projectRoot, "node_modules", "suivant", 
 import Page from "${pageImport.replace(/\\/g, "/")}";
 ${appImport ? `import App from "${appImport.replace(/\\/g, "/")}";` : `const App = ({ Component, pageProps }) => <Component {...pageProps} />;`}
 
-const manifest = JSON.parse(document.getElementById("__SUIVANT_MANIFEST__")?.textContent || "{}");
-hydrate({ Page, App, manifest });
+export default Page;
+
+// Only hydrate on initial page load, not when imported during client-side navigation
+if (!window.__suivant_hydrated) {
+  window.__suivant_hydrated = true;
+  const manifest = JSON.parse(document.getElementById("__SUIVANT_MANIFEST__")?.textContent || "{}");
+  hydrate({ Page, App, manifest });
+}
 `;
     fs.writeFileSync(entryFile, entryCode);
     entryMap.set(chunkName, entryFile);
