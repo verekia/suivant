@@ -8,7 +8,7 @@ import {
   resolveSpecialFile,
 } from "../build/discover.js";
 import { compilePagesForSSR, bundleClientJS } from "../build/bundle.js";
-import { renderPage, defaultDocument } from "../build/render.js";
+import { renderPage, assemblePageHtml, defaultDocument } from "../build/render.js";
 import { detectCssFile, buildCss } from "../build/css.js";
 import {
   generateManifest,
@@ -17,6 +17,7 @@ import {
 } from "../build/manifest.js";
 import { fillParams, routeToDataPath, routeToChunkName } from "../build/routes.js";
 import { loadEnvFiles, getPublicEnvDefines } from "../build/env.js";
+import { pMap, getParallelism, SSRWorkerPool } from "../build/parallel.js";
 import type { ResolvedRoute, DocumentParams, AppProps } from "../types.js";
 import type { ComponentType } from "react";
 
@@ -45,6 +46,7 @@ export function defaultApp({ Component, pageProps }) {
 export async function build() {
   const projectRoot = process.cwd();
   const outDir = path.join(projectRoot, "out");
+  const concurrency = getParallelism();
 
   // Load environment files
   console.log(pc.gray("  Loading environment variables..."));
@@ -81,12 +83,17 @@ export async function build() {
     [ssrHelperPath]
   );
 
+  // Helper to get the compiled SSR module path without loading it
+  function ssrModulePath(filePath: string): string {
+    const relative = path.relative(projectRoot, filePath);
+    return path.join(ssrOutDir, relative).replace(/\.(tsx?|jsx?)$/, ".cjs");
+  }
+
   // Helper to load a compiled SSR module
   // Anchor require to project root so externalized deps (react, etc.) resolve from the user's node_modules
   const projectRequire = createRequire(path.join(projectRoot, "package.json"));
   function loadSSRModule(filePath: string): any {
-    const relative = path.relative(projectRoot, filePath);
-    const ssrPath = path.join(ssrOutDir, relative).replace(/\.(tsx?|jsx?)$/, ".cjs");
+    const ssrPath = ssrModulePath(filePath);
     // Clear require cache
     delete projectRequire.cache[projectRequire.resolve(ssrPath)];
     return projectRequire(ssrPath);
@@ -109,7 +116,7 @@ export async function build() {
     documentFn = docMod.default || docMod;
   }
 
-  // 3. Resolve all (route, params) pairs
+  // 3. Resolve all (route, params) pairs — concurrently for dynamic routes
   console.log(pc.gray("  Resolving static paths..."));
 
   type PageInstance = {
@@ -118,67 +125,72 @@ export async function build() {
     urlPath: string;
   };
 
-  const pageInstances: PageInstance[] = [];
-
-  for (const route of routes) {
-    if (route.paramNames.length > 0) {
-      // Dynamic route — call getStaticPaths
-      const mod = loadSSRModule(route.filePath);
-      if (!mod.getStaticPaths) {
-        console.warn(
-          pc.yellow(
-            `  Warning: Dynamic route ${route.routePattern} has no getStaticPaths — skipping`
-          )
-        );
-        continue;
+  const pageInstanceArrays = await pMap(
+    routes,
+    async (route) => {
+      if (route.paramNames.length > 0) {
+        const mod = loadSSRModule(route.filePath);
+        if (!mod.getStaticPaths) {
+          console.warn(
+            pc.yellow(
+              `  Warning: Dynamic route ${route.routePattern} has no getStaticPaths — skipping`
+            )
+          );
+          return [];
+        }
+        const { paths } = await mod.getStaticPaths();
+        return paths.map((p: { params: Record<string, string> }) => ({
+          route,
+          params: p.params,
+          urlPath: fillParams(route.urlPattern, p.params),
+        }));
       }
-      const { paths } = await mod.getStaticPaths();
-      for (const p of paths) {
-        const urlPath = fillParams(route.urlPattern, p.params);
-        pageInstances.push({ route, params: p.params, urlPath });
-      }
-    } else {
-      pageInstances.push({ route, params: {}, urlPath: route.urlPattern });
-    }
-  }
+      return [{ route, params: {}, urlPath: route.urlPattern }];
+    },
+    concurrency
+  );
 
+  const pageInstances: PageInstance[] = pageInstanceArrays.flat();
   console.log(pc.gray(`  Will render ${pageInstances.length} page(s)`));
 
-  // 4. Run getStaticProps for each page instance
+  // 4. Run getStaticProps concurrently
   console.log(pc.gray("  Running getStaticProps..."));
   const propsMap = new Map<string, Record<string, any>>(); // dataKey → props
 
-  for (const instance of pageInstances) {
-    const mod = loadSSRModule(instance.route.filePath);
-    let props = {};
-    if (mod.getStaticProps) {
-      const result = await mod.getStaticProps({ params: instance.params });
-      props = result.props;
-    }
-    const dataKey = routeToDataPath(
-      instance.route.routePattern,
-      instance.params
-    );
-    propsMap.set(dataKey, props);
-  }
-
-  // 5. Build CSS
-  let cssPath: string | undefined;
-  const cssFile = detectCssFile(appFile, pagesDir);
-  if (cssFile) {
-    console.log(pc.gray("  Building CSS..."));
-    cssPath = await buildCss(cssFile, outDir, projectRoot);
-  }
-
-  // 6. Bundle client JS
-  console.log(pc.gray("  Bundling client JavaScript..."));
-  const chunkPaths = await bundleClientJS(
-    routes,
-    { app: appFile ?? undefined },
-    projectRoot,
-    outDir,
-    publicEnvDefines
+  await pMap(
+    pageInstances,
+    async (instance) => {
+      const mod = loadSSRModule(instance.route.filePath);
+      let props = {};
+      if (mod.getStaticProps) {
+        const result = await mod.getStaticProps({ params: instance.params });
+        props = result.props;
+      }
+      const dataKey = routeToDataPath(
+        instance.route.routePattern,
+        instance.params
+      );
+      propsMap.set(dataKey, props);
+    },
+    concurrency
   );
+
+  // 5–6. Build CSS and bundle client JS in parallel
+  console.log(pc.gray("  Building CSS & bundling client JavaScript..."));
+  const cssFile = detectCssFile(appFile, pagesDir);
+
+  const [cssPath, chunkPaths] = await Promise.all([
+    cssFile
+      ? buildCss(cssFile, outDir, projectRoot)
+      : Promise.resolve(undefined),
+    bundleClientJS(
+      routes,
+      { app: appFile ?? undefined },
+      projectRoot,
+      outDir,
+      publicEnvDefines
+    ),
+  ]);
 
   // 7. Generate manifest
   const pageParams = new Map<string, Array<Record<string, string>>>();
@@ -189,50 +201,97 @@ export async function build() {
   }
 
   const manifest = generateManifest(routes, chunkPaths, pageParams);
+  const manifestJson = JSON.stringify(manifest);
 
-  // 8. SSR render each page
-  console.log(pc.gray("  Rendering pages..."));
+  // 8. SSR render each page — use worker threads for large builds
+  console.log(
+    pc.gray(
+      `  Rendering pages${SSRWorkerPool.shouldUseWorkers(pageInstances.length) ? ` (${concurrency} threads)` : ""}...`
+    )
+  );
 
-  for (const instance of pageInstances) {
-    const mod = loadSSRModule(instance.route.filePath);
-    const Page = mod.default || mod;
-    const dataKey = routeToDataPath(
-      instance.route.routePattern,
-      instance.params
-    );
-    const pageProps = propsMap.get(dataKey) || {};
+  if (SSRWorkerPool.shouldUseWorkers(pageInstances.length)) {
+    // Parallel SSR rendering with worker threads
+    const poolSize = Math.min(concurrency, pageInstances.length);
+    const pool = new SSRWorkerPool(projectRoot, poolSize);
+    const ssrHelperCjsPath = ssrModulePath(ssrHelperPath);
+    const appCjsPath = appFile ? ssrModulePath(appFile) : null;
 
-    const chunkName = routeToChunkName(instance.route.routePattern);
-    const chunkPath =
-      chunkPaths.get(chunkName) || `/_suivant/chunks/${chunkName}.js`;
+    try {
+      const renderResults = await Promise.all(
+        pageInstances.map(async (instance) => {
+          const pageModuleCjsPath = ssrModulePath(instance.route.filePath);
+          const dataKey = routeToDataPath(
+            instance.route.routePattern,
+            instance.params
+          );
+          const pageProps = propsMap.get(dataKey) || {};
 
-    const manifestJson = JSON.stringify(manifest);
-    const manifestScript = `<script id="__SUIVANT_MANIFEST__" type="application/json">${manifestJson}</script>`;
-    const scriptTag = `<script type="module" src="${chunkPath}"></script>`;
+          const ssrResult = await pool.render({
+            ssrHelperPath: ssrHelperCjsPath,
+            pageModulePath: pageModuleCjsPath,
+            appModulePath: appCjsPath,
+            pageProps,
+          });
 
-    const html = renderPage({
-      Page,
-      pageProps,
-      App,
-      documentFn,
-      routePattern: instance.route.routePattern,
-      params: instance.params,
-      cssPath,
-      scriptTags: `${manifestScript}\n    ${scriptTag}`,
-      dataJson: JSON.stringify(pageProps),
-      ssrRender: ssrHelper.ssrRender,
-    });
+          return { instance, ssrResult, pageProps };
+        })
+      );
 
-    // Determine output file path
-    let outPath: string;
-    if (instance.urlPath === "/") {
-      outPath = path.join(outDir, "index.html");
-    } else {
-      outPath = path.join(outDir, instance.urlPath.slice(1) + ".html");
+      // Assemble final HTML and write files (fast, synchronous)
+      for (const { instance, ssrResult, pageProps } of renderResults) {
+        const chunkName = routeToChunkName(instance.route.routePattern);
+        const chunkPath =
+          chunkPaths.get(chunkName) || `/_suivant/chunks/${chunkName}.js`;
+        const manifestScript = `<script id="__SUIVANT_MANIFEST__" type="application/json">${manifestJson}</script>`;
+        const scriptTag = `<script type="module" src="${chunkPath}"></script>`;
+
+        const html = assemblePageHtml({
+          html: ssrResult.html,
+          headTags: ssrResult.headTags,
+          documentFn,
+          cssPath,
+          scriptTags: `${manifestScript}\n    ${scriptTag}`,
+          dataJson: JSON.stringify(pageProps),
+        });
+
+        writePageHtml(outDir, instance.urlPath, html);
+      }
+    } finally {
+      await pool.destroy();
     }
+  } else {
+    // Sequential SSR rendering for small builds (avoids worker thread overhead)
+    for (const instance of pageInstances) {
+      const mod = loadSSRModule(instance.route.filePath);
+      const Page = mod.default || mod;
+      const dataKey = routeToDataPath(
+        instance.route.routePattern,
+        instance.params
+      );
+      const pageProps = propsMap.get(dataKey) || {};
 
-    fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, html);
+      const chunkName = routeToChunkName(instance.route.routePattern);
+      const chunkPath =
+        chunkPaths.get(chunkName) || `/_suivant/chunks/${chunkName}.js`;
+      const manifestScript = `<script id="__SUIVANT_MANIFEST__" type="application/json">${manifestJson}</script>`;
+      const scriptTag = `<script type="module" src="${chunkPath}"></script>`;
+
+      const html = renderPage({
+        Page,
+        pageProps,
+        App,
+        documentFn,
+        routePattern: instance.route.routePattern,
+        params: instance.params,
+        cssPath,
+        scriptTags: `${manifestScript}\n    ${scriptTag}`,
+        dataJson: JSON.stringify(pageProps),
+        ssrRender: ssrHelper.ssrRender,
+      });
+
+      writePageHtml(outDir, instance.urlPath, html);
+    }
   }
 
   // 9. Write manifest and data files
@@ -250,6 +309,17 @@ export async function build() {
   fs.rmSync(path.join(projectRoot, ".suivant"), { recursive: true, force: true });
 
   console.log(pc.green(`\n  Build complete! Output in ${pc.bold("out/")}\n`));
+}
+
+function writePageHtml(outDir: string, urlPath: string, html: string) {
+  let outPath: string;
+  if (urlPath === "/") {
+    outPath = path.join(outDir, "index.html");
+  } else {
+    outPath = path.join(outDir, urlPath.slice(1) + ".html");
+  }
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, html);
 }
 
 function copyDir(src: string, dest: string) {

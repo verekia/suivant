@@ -127,6 +127,39 @@ function escapeHtml(str: string): string {
     .replace(/"/g, "&quot;");
 }
 
+export interface AssemblePageHtmlOptions {
+  html: string;
+  headTags: HeadTag[];
+  documentFn: (params: DocumentParams) => string;
+  cssPath?: string;
+  scriptTags: string;
+  dataJson: string;
+}
+
+/**
+ * Assemble the final page HTML from pre-rendered SSR output.
+ * Used when SSR rendering is done in worker threads — the worker produces
+ * html + headTags, and this function handles the rest (document template, CSS, scripts).
+ */
+export function assemblePageHtml(options: AssemblePageHtmlOptions): string {
+  const { html, headTags, documentFn, cssPath, scriptTags, dataJson } = options;
+
+  const headHtml = renderHeadTags(headTags);
+
+  const styles = cssPath
+    ? `<link rel="stylesheet" href="${cssPath}" />`
+    : "";
+
+  const dataScript = `<script id="__SUIVANT_DATA__" type="application/json">${escapeJsonForScript(dataJson)}</script>`;
+
+  return documentFn({
+    html,
+    head: headHtml,
+    styles,
+    scripts: `${dataScript}\n    ${scriptTags}`,
+  });
+}
+
 function escapeJsonForScript(json: string): string {
   return json.replace(/<\//g, "<\\/").replace(/<!--/g, "<\\!--");
 }
